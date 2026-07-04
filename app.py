@@ -272,6 +272,20 @@ CUSTOM_CSS = """
             -webkit-backdrop-filter: none !important;
             background: rgba(11, 18, 32, 0.55) !important;
         }
+        /* Force the folium map's own iframe box to a sane, fixed height on
+           mobile — some streamlit-folium versions mis-calculate height when
+           combined with use_container_width on narrow viewports, reserving
+           far more vertical space than intended. */
+        [data-testid="stIFrame"] iframe {
+            width: 100% !important;
+            height: 460px !important;
+            max-height: 460px !important;
+        }
+        [data-testid="stIFrame"] {
+            height: 460px !important;
+            max-height: 460px !important;
+            overflow: hidden !important;
+        }
     }
 </style>
 """
@@ -504,7 +518,7 @@ for c, (label, value) in zip(cols, metrics):
 # ============================================================================
 st.markdown("<div class='section-title'>🗺️ Web-GIS Regional Hazard Map</div>", unsafe_allow_html=True)
 hazard_map = build_hazard_map(all_results)
-st_folium(hazard_map, use_container_width=True, height=460, returned_objects=[])
+st_folium(hazard_map, width=700, height=460, returned_objects=[])
 
 left, right = st.columns([1.1, 1])
 
