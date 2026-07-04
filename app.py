@@ -80,8 +80,8 @@ CUSTOM_CSS = """
         padding-top: 1.6rem;
     }
     @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(10px); }
-        to   { opacity: 1; transform: translateY(0); }
+        from { opacity: 0; }
+        to   { opacity: 1; }
     }
 
     /* ---------- title + ripple divider ---------- */
@@ -257,6 +257,20 @@ CUSTOM_CSS = """
     @media (prefers-reduced-motion: reduce) {
         .stApp, .risk-banner, .metric-card, .wave-divider, .block-container {
             animation: none !important;
+        }
+    }
+
+    /* ---------- mobile: disable backdrop-filter on iframe/chart wrappers ----------
+       backdrop-filter + iframes has a well-known repaint bug on mobile Safari/
+       Chrome: the blurred layer can get "stuck" showing a stale blank/black
+       frame until something forces a reflow (e.g. opening DevTools). It's a
+       purely decorative effect, so we just turn it off below ~768px instead
+       of fighting the browser bug. */
+    @media (max-width: 768px) {
+        [data-testid="stIFrame"], [data-testid="stPlotlyChart"] {
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            background: rgba(11, 18, 32, 0.55) !important;
         }
     }
 </style>
@@ -491,6 +505,22 @@ for c, (label, value) in zip(cols, metrics):
 st.markdown("<div class='section-title'>🗺️ Web-GIS Regional Hazard Map</div>", unsafe_allow_html=True)
 hazard_map = build_hazard_map(all_results)
 st_folium(hazard_map, use_container_width=True, height=460, returned_objects=[])
+
+# Safety net: force Leaflet to recompute its tile grid after mount. Without
+# this, mobile browsers sometimes initialize the map while an ancestor
+# element is still transitioning (e.g. the block-container fade-in),
+# leaving the map with a stale/blank size until the user manually
+# interacts with it.
+st.components.v1.html(
+    """
+    <script>
+        setTimeout(function () {
+            window.parent.dispatchEvent(new Event('resize'));
+        }, 350);
+    </script>
+    """,
+    height=0,
+)
 
 left, right = st.columns([1.1, 1])
 
