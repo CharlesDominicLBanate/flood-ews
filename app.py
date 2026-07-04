@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from streamlit_folium import st_folium
+import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
 from config import LOCATIONS, REFRESH_INTERVAL_MS, DEFAULT_SLOPE_FACTOR
@@ -80,8 +80,8 @@ CUSTOM_CSS = """
         padding-top: 1.6rem;
     }
     @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(10px); }
-        to   { opacity: 1; transform: translateY(0); }
+        from { opacity: 0; }
+        to   { opacity: 1; }
     }
 
     /* ---------- title + ripple divider ---------- */
@@ -257,6 +257,34 @@ CUSTOM_CSS = """
     @media (prefers-reduced-motion: reduce) {
         .stApp, .risk-banner, .metric-card, .wave-divider, .block-container {
             animation: none !important;
+        }
+    }
+
+    /* ---------- mobile: disable backdrop-filter on iframe/chart wrappers ----------
+       backdrop-filter + iframes has a well-known repaint bug on mobile Safari/
+       Chrome: the blurred layer can get "stuck" showing a stale blank/black
+       frame until something forces a reflow (e.g. opening DevTools). It's a
+       purely decorative effect, so we just turn it off below ~768px instead
+       of fighting the browser bug. */
+    @media (max-width: 768px) {
+        [data-testid="stIFrame"], [data-testid="stPlotlyChart"] {
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            background: rgba(11, 18, 32, 0.55) !important;
+        }
+        /* Force the folium map's own iframe box to a sane, fixed height on
+           mobile — some streamlit-folium versions mis-calculate height when
+           combined with use_container_width on narrow viewports, reserving
+           far more vertical space than intended. */
+        [data-testid="stIFrame"] iframe {
+            width: 100% !important;
+            height: 460px !important;
+            max-height: 460px !important;
+        }
+        [data-testid="stIFrame"] {
+            height: 460px !important;
+            max-height: 460px !important;
+            overflow: hidden !important;
         }
     }
 </style>
@@ -490,7 +518,7 @@ for c, (label, value) in zip(cols, metrics):
 # ============================================================================
 st.markdown("<div class='section-title'>🗺️ Web-GIS Regional Hazard Map</div>", unsafe_allow_html=True)
 hazard_map = build_hazard_map(all_results)
-st_folium(hazard_map, use_container_width=True, height=460, returned_objects=[])
+components.html(hazard_map._repr_html_(), height=460, scrolling=False)
 
 left, right = st.columns([1.1, 1])
 
