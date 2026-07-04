@@ -506,22 +506,6 @@ st.markdown("<div class='section-title'>🗺️ Web-GIS Regional Hazard Map</div
 hazard_map = build_hazard_map(all_results)
 st_folium(hazard_map, use_container_width=True, height=460, returned_objects=[])
 
-# Safety net: force Leaflet to recompute its tile grid after mount. Without
-# this, mobile browsers sometimes initialize the map while an ancestor
-# element is still transitioning (e.g. the block-container fade-in),
-# leaving the map with a stale/blank size until the user manually
-# interacts with it.
-st.components.v1.html(
-    """
-    <script>
-        setTimeout(function () {
-            window.parent.dispatchEvent(new Event('resize'));
-        }, 350);
-    </script>
-    """,
-    height=0,
-)
-
 left, right = st.columns([1.1, 1])
 
 with left:
