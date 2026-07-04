@@ -22,6 +22,21 @@ def build_hazard_map(location_results: dict, center=(9.5, 122.5), zoom_start=6):
     )
     Fullscreen(position="topright").add_to(fmap)
 
+    # ------------------------------------------------------------------
+    # Mobile fix, part 1: the map div is sized to height:100% relative to
+    # its parent. If the surrounding <html>/<body> inside the map's own
+    # HTML document don't have an explicit height, percentage heights
+    # never resolve properly and the map collapses to whatever content
+    # happens to be loaded — leaving a large blank area below it inside
+    # the reserved component height. Force it explicitly.
+    # ------------------------------------------------------------------
+    fmap.get_root().header.add_child(folium.Element("""
+        <style>
+            html, body { height: 100% !important; width: 100% !important; margin: 0; padding: 0; }
+            .folium-map { height: 100% !important; width: 100% !important; }
+        </style>
+    """))
+
     for name, info in location_results.items():
         lat, lon = info["lat"], info["lon"]
         ffri = info["ffri"]
