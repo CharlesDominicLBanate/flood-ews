@@ -286,6 +286,14 @@ CUSTOM_CSS = """
             max-height: 460px !important;
             overflow: hidden !important;
         }
+        /* Also clamp whatever wrapper div directly contains the map iframe —
+           on mobile this wrapper sometimes reserves more height than the
+           iframe itself actually needs, leaving blank space below the card. */
+        div:has(> iframe) {
+            height: 460px !important;
+            max-height: 460px !important;
+            overflow: hidden !important;
+        }
     }
 </style>
 """
