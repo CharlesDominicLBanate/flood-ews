@@ -61,4 +61,29 @@ def build_hazard_map(location_results: dict, center=(9.5, 122.5), zoom_start=6):
             tooltip=f"{name}: {label}",
         ).add_to(fmap)
 
+    # ------------------------------------------------------------------
+    # Mobile fix: Leaflet sometimes initializes while its container hasn't
+    # settled to its final size yet (common on mobile browsers, inside a
+    # Streamlit component iframe), leaving only the initially-visible
+    # tiles loaded and the rest of the map blank/white. We inject a script
+    # directly into the map's own HTML (so it runs in the SAME iframe as
+    # the Leaflet instance, not a sibling component) that calls
+    # `invalidateSize()` a couple of times after mount to force it to
+    # recompute its size and fetch any missing tiles.
+    # ------------------------------------------------------------------
+    map_var = fmap.get_name()
+    resize_fix = folium.Element(f"""
+        <script>
+            function __fixMapSize_{map_var}() {{
+                if (typeof {map_var} !== "undefined") {{
+                    {map_var}.invalidateSize({{ animate: false, pan: false }});
+                }}
+            }}
+            setTimeout(__fixMapSize_{map_var}, 300);
+            setTimeout(__fixMapSize_{map_var}, 900);
+            window.addEventListener("load", __fixMapSize_{map_var});
+        </script>
+    """)
+    fmap.get_root().html.add_child(resize_fix)
+
     return fmap
