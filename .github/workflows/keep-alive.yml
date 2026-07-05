@@ -15,5 +15,5 @@ jobs:
       - name: Visit the Streamlit app
         run: |
           echo "Pinging app to keep it awake..."
-          curl -sSL --max-time 30 -o /dev/null -w "HTTP status: %{http_code}\n" \
+          curl -sS -L --max-time 30 --max-redirs 5 -o /dev/null -w "HTTP status: %{http_code}\n" \
             "https://flood-ews-fzlspn8yaqihgxe3s2n8ka.streamlit.app/"
