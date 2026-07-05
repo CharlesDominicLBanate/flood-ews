@@ -1,0 +1,19 @@
+name: Keep Streamlit App Awake
+
+# Pings the Streamlit app every 6 hours so it never hits the platform's
+# 12-hour inactivity sleep threshold. Also lets you trigger it manually
+# from the Actions tab whenever you want ("Run workflow").
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours, all days
+  workflow_dispatch: {}       # adds a manual "Run workflow" button
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Visit the Streamlit app
+        run: |
+          echo "Pinging app to keep it awake..."
+          curl -sSL --max-time 30 -o /dev/null -w "HTTP status: %{http_code}\n" \
+            "https://flood-ews-fzlspn8yaqihgxe3s2n8ka.streamlit.app/"
