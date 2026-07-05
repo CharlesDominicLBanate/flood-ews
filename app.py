@@ -19,7 +19,7 @@ from streamlit_autorefresh import st_autorefresh
 
 from config import LOCATIONS, REFRESH_INTERVAL_MS, DEFAULT_SLOPE_FACTOR
 from data_fetcher import (
-    fetch_current_weather, fetch_elevation, generate_demo_weather, geocode_location,
+    fetch_current_weather_batch, fetch_elevation_batch, generate_demo_weather, geocode_location,
     fetch_psgc_regions, get_provinces_for_region, get_places_for_province,
     get_independent_cities_for_region, clean_place_name, fetch_barangays_for_place,
 )
@@ -441,13 +441,20 @@ if auto_refresh:
 # ============================================================================
 @st.cache_data(ttl=60)
 def compute_all_locations(use_demo: bool, locations_dict: dict):
+    coords = tuple((meta["lat"], meta["lon"]) for meta in locations_dict.values())
+
+    if use_demo:
+        weather_by_coord = {c: generate_demo_weather(*c) for c in coords}
+        elevation_by_coord = {c: 50.0 for c in coords}
+    else:
+        weather_by_coord = fetch_current_weather_batch(coords)
+        elevation_by_coord = fetch_elevation_batch(coords)
+
     results = {}
     for name, meta in locations_dict.items():
-        if use_demo:
-            weather = generate_demo_weather(meta["lat"], meta["lon"])
-        else:
-            weather = fetch_current_weather(meta["lat"], meta["lon"])
-        elevation = 50.0 if use_demo else fetch_elevation(meta["lat"], meta["lon"])
+        coord = (meta["lat"], meta["lon"])
+        weather = weather_by_coord.get(coord, generate_demo_weather(*coord))
+        elevation = elevation_by_coord.get(coord, 0.0)
 
         sim = run_chaos_simulation(weather, slope_factor=meta["slope_factor"])
         results[name] = {
