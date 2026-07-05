@@ -15,5 +15,11 @@ jobs:
       - name: Visit the Streamlit app
         run: |
           echo "Pinging app to keep it awake..."
-          curl -sS -L --max-time 30 --max-redirs 5 -o /dev/null -w "HTTP status: %{http_code}\n" \
+          curl -sS -L \
+            --max-time 30 \
+            --max-redirs 10 \
+            --cookie-jar /tmp/cookies.txt \
+            --cookie /tmp/cookies.txt \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
+            -o /dev/null -w "HTTP status: %{http_code}\n" \
             "https://flood-ews-fzlspn8yaqihgxe3s2n8ka.streamlit.app/"
