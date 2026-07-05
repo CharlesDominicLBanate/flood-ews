@@ -7,6 +7,7 @@ weather data" ingestion layer referenced in the research design.
 """
 
 import random
+import time
 import requests
 import streamlit as st
 from config import WEATHER_API_URL, ELEVATION_API_URL, GEOCODING_API_URL
@@ -299,3 +300,135 @@ def fetch_elevation(lat: float, lon: float) -> float:
         return data.get("elevation", [0.0])[0]
     except Exception:
         return 0.0
+
+
+def _get_with_retry(url: str, params: dict, timeout: int, retries: int = 2):
+    """
+    GET with a couple of retries + short backoff, specifically to absorb
+    transient 429 (rate limit) responses gracefully instead of failing
+    the whole batch outright.
+    """
+    delay = 1.0
+    last_exc = None
+    for attempt in range(retries + 1):
+        try:
+            resp = requests.get(url, params=params, timeout=timeout)
+            if resp.status_code == 429 and attempt < retries:
+                time.sleep(delay)
+                delay *= 2
+                continue
+            resp.raise_for_status()
+            return resp
+        except Exception as e:
+            last_exc = e
+            if attempt < retries:
+                time.sleep(delay)
+                delay *= 2
+    if last_exc:
+        raise last_exc
+
+
+@st.cache_data(ttl=300)
+def fetch_current_weather_batch(coords: tuple) -> dict:
+    """
+    Fetches weather for MANY locations in a SINGLE Open-Meteo request,
+    using its comma-separated multi-location support. This replaces N
+    separate calls (one per monitored site) with just one — the previous
+    per-location loop was firing ~20 near-simultaneous requests every
+    time the shared 5-minute cache expired (since all sites were first
+    populated together), which is exactly the kind of burst that trips
+    Open-Meteo's rate limiting (HTTP 429).
+
+    coords: tuple of (lat, lon) tuples, in the exact order results are needed.
+    Returns: dict mapping the (lat, lon) tuple -> weather dict (same shape
+             as fetch_current_weather's return value).
+    """
+    if not coords:
+        return {}
+
+    lats = ",".join(str(c[0]) for c in coords)
+    lons = ",".join(str(c[1]) for c in coords)
+
+    params = {
+        "latitude": lats,
+        "longitude": lons,
+        "current": ",".join([
+            "precipitation", "rain", "relative_humidity_2m",
+            "temperature_2m", "wind_speed_10m", "surface_pressure",
+        ]),
+        "hourly": ",".join(["precipitation", "soil_moisture_0_to_1cm"]),
+        "forecast_days": 1,
+        "timezone": "auto",
+    }
+
+    try:
+        resp = _get_with_retry(WEATHER_API_URL, params, timeout=20)
+        data = resp.json()
+        # Open-Meteo returns a LIST of per-location objects when multiple
+        # lat/lon values are passed, in the same order they were given.
+        entries = data if isinstance(data, list) else [data]
+
+        out = {}
+        for coord, entry in zip(coords, entries):
+            current = entry.get("current", {})
+            hourly = entry.get("hourly", {})
+            soil_series = hourly.get("soil_moisture_0_to_1cm", [])
+            soil_moisture = soil_series[0] if soil_series else 0.2
+            precip_series = hourly.get("precipitation", [])
+            precip_accum_24h = sum(v for v in precip_series if v is not None)
+
+            out[coord] = {
+                "success": True,
+                "precipitation_mm": current.get("precipitation", 0.0) or 0.0,
+                "rain_mm": current.get("rain", 0.0) or 0.0,
+                "humidity_pct": current.get("relative_humidity_2m", 50.0) or 50.0,
+                "temperature_c": current.get("temperature_2m", 25.0) or 25.0,
+                "wind_speed_kmh": current.get("wind_speed_10m", 0.0) or 0.0,
+                "pressure_hpa": current.get("surface_pressure", 1013.0) or 1013.0,
+                "soil_moisture": soil_moisture if soil_moisture is not None else 0.2,
+                "precip_accum_24h_mm": precip_accum_24h,
+                "hourly_precip_series": precip_series[:24],
+            }
+        return out
+
+    except Exception as e:
+        # Fail gracefully for ALL locations at once so the dashboard still
+        # renders with fallback values instead of crashing.
+        fallback = {
+            "success": False,
+            "error": str(e),
+            "precipitation_mm": 0.0,
+            "rain_mm": 0.0,
+            "humidity_pct": 50.0,
+            "temperature_c": 25.0,
+            "wind_speed_kmh": 0.0,
+            "pressure_hpa": 1013.0,
+            "soil_moisture": 0.2,
+            "precip_accum_24h_mm": 0.0,
+            "hourly_precip_series": [],
+        }
+        return {coord: dict(fallback) for coord in coords}
+
+
+@st.cache_data(ttl=3600)
+def fetch_elevation_batch(coords: tuple) -> dict:
+    """
+    Same batching idea as fetch_current_weather_batch, but for elevation.
+    Returns: dict mapping (lat, lon) -> elevation in meters.
+    """
+    if not coords:
+        return {}
+
+    lats = ",".join(str(c[0]) for c in coords)
+    lons = ",".join(str(c[1]) for c in coords)
+
+    try:
+        resp = _get_with_retry(
+            ELEVATION_API_URL, {"latitude": lats, "longitude": lons}, timeout=15
+        )
+        data = resp.json()
+        elevations = data.get("elevation", [])
+        return {coord: elevations[i] if i < len(elevations) else 0.0
+                 for i, coord in enumerate(coords)}
+    except Exception:
+        return {coord: 0.0 for coord in coords}
