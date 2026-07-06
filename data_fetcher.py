@@ -1,11 +1,3 @@
-"""
-data_fetcher.py
-----------------
-Handles ingestion of REAL-TIME weather data and SPATIAL (elevation) data.
-Uses the free Open-Meteo API (no key required). This is the "streaming
-weather data" ingestion layer referenced in the research design.
-"""
-
 import random
 import time
 import requests
@@ -17,7 +9,6 @@ PSGC_BASE = "https://psgc.cloud/api"
 
 @st.cache_data(ttl=86400)  # PSGC data barely changes; cache for a full day
 def fetch_psgc_regions():
-    """All 17 regions of the Philippines."""
     try:
         resp = requests.get(f"{PSGC_BASE}/regions", timeout=20)
         resp.raise_for_status()
@@ -28,7 +19,6 @@ def fetch_psgc_regions():
 
 @st.cache_data(ttl=86400)
 def fetch_psgc_provinces():
-    """All provinces (NCR/BARMM special cities are handled separately as 'independent')."""
     try:
         resp = requests.get(f"{PSGC_BASE}/provinces", timeout=20)
         resp.raise_for_status()
@@ -58,7 +48,6 @@ def fetch_psgc_municipalities():
 
 
 def get_provinces_for_region(region_code: str):
-    """Filter provinces belonging to a region (matched by 2-digit prefix)."""
     provinces = fetch_psgc_provinces()
     prefix = region_code[:2]
     return sorted(
@@ -68,7 +57,6 @@ def get_provinces_for_region(region_code: str):
 
 
 def get_places_for_province(province_code: str):
-    """All cities + municipalities under a given province (matched by 4-digit prefix)."""
     prefix = province_code[:4]
     cities = fetch_psgc_cities()
     munis = fetch_psgc_municipalities()
@@ -79,14 +67,6 @@ def get_places_for_province(province_code: str):
 
 @st.cache_data(ttl=86400)
 def fetch_barangays_for_place(place_code: str):
-    """
-    All barangays under a given city/municipality PSGC code.
-
-    Tries the direct nested endpoint first; falls back to alternate
-    path shapes since PSGC-mirroring APIs aren't always consistent
-    about which resource name ('cities-municipalities' vs 'cities' /
-    'municipalities') a given code lives under.
-    """
     candidate_urls = [
         f"{PSGC_BASE}/cities-municipalities/{place_code}/barangays",
         f"{PSGC_BASE}/cities/{place_code}/barangays",
@@ -106,11 +86,6 @@ def fetch_barangays_for_place(place_code: str):
 
 
 def get_independent_cities_for_region(region_code: str):
-    """
-    Highly urbanized / independent cities that don't sit under any province
-    (e.g. Metro Manila cities, Cebu City, Davao City, Baguio, Zamboanga City),
-    filtered to the given region.
-    """
     prefix = region_code[:2]
     all_provinces = fetch_psgc_provinces()
     province_prefixes = {p.get("code", "")[:4] for p in all_provinces}
@@ -123,7 +98,6 @@ def get_independent_cities_for_region(region_code: str):
 
 
 def clean_place_name(raw_name: str) -> str:
-    """'City of Legazpi ' -> 'Legazpi City' style cleanup for geocoding + display."""
     name = raw_name.strip()
     if name.lower().startswith("city of "):
         name = name[8:].strip() + " City"
@@ -132,18 +106,6 @@ def clean_place_name(raw_name: str) -> str:
 
 @st.cache_data(ttl=3600)
 def geocode_location(place_name: str, country_code: str = "PH"):
-    """
-    Looks up any place name (city, municipality, barangay) and returns its
-    coordinates. Lets users monitor ANY location in the Philippines (or
-    worldwide) instead of only the predefined list.
-
-    Tries a country-filtered search first; if nothing matches (common when
-    the API tags a place with a different/missing country code, or the
-    exact PSGC spelling doesn't match Open-Meteo's naming), falls back to
-    an unfiltered search so legitimate places still resolve.
-
-    Returns a list of matches: [{"name", "lat", "lon", "admin1", "country"}]
-    """
     def _query(name):
         try:
             resp = requests.get(
@@ -188,11 +150,7 @@ def geocode_location(place_name: str, country_code: str = "PH"):
 
 
 def generate_demo_weather(lat: float, lon: float) -> dict:
-    """
-    Simulated weather generator used for offline demos / thesis defense
-    when no internet connection is available. Produces plausible, randomly
-    varying values so the dashboard still feels 'live'.
-    """
+
     rng = random.Random(f"{lat:.2f}{lon:.2f}{int(__import__('time').time() // 30)}")
     rain = max(0.0, rng.gauss(6, 8))
     humidity = min(100, max(40, rng.gauss(80, 10)))
@@ -248,11 +206,11 @@ def fetch_current_weather(lat: float, lon: float) -> dict:
         current = data.get("current", {})
         hourly = data.get("hourly", {})
 
-        # Grab the most recent hourly soil moisture reading available
+      
         soil_moisture_series = hourly.get("soil_moisture_0_to_1cm", [])
         soil_moisture = soil_moisture_series[0] if soil_moisture_series else 0.2
 
-        # Sum next-24h forecast precipitation as an "accumulation" signal
+   
         precip_series = hourly.get("precipitation", [])
         precip_accum_24h = sum(v for v in precip_series if v is not None)
 
@@ -270,7 +228,7 @@ def fetch_current_weather(lat: float, lon: float) -> dict:
         }
 
     except Exception as e:
-        # Fail gracefully so the dashboard keeps running even if the API hiccups
+     
         return {
             "success": False,
             "error": str(e),
@@ -288,7 +246,7 @@ def fetch_current_weather(lat: float, lon: float) -> dict:
 
 @st.cache_data(ttl=3600)
 def fetch_elevation(lat: float, lon: float) -> float:
-    """Spatial data: ground elevation (meters) at a coordinate."""
+   
     try:
         resp = requests.get(
             ELEVATION_API_URL,
@@ -303,11 +261,7 @@ def fetch_elevation(lat: float, lon: float) -> float:
 
 
 def _get_with_retry(url: str, params: dict, timeout: int, retries: int = 3):
-    """
-    GET with a few retries + short backoff, to absorb transient 429 (rate
-    limit) or 5xx (server-side outage) responses gracefully instead of
-    failing the whole batch outright.
-    """
+   
     delay = 1.5
     last_exc = None
     for attempt in range(retries + 1):
@@ -330,19 +284,7 @@ def _get_with_retry(url: str, params: dict, timeout: int, retries: int = 3):
 
 @st.cache_data(ttl=300)
 def fetch_current_weather_batch(coords: tuple) -> dict:
-    """
-    Fetches weather for MANY locations in a SINGLE Open-Meteo request,
-    using its comma-separated multi-location support. This replaces N
-    separate calls (one per monitored site) with just one — the previous
-    per-location loop was firing ~20 near-simultaneous requests every
-    time the shared 5-minute cache expired (since all sites were first
-    populated together), which is exactly the kind of burst that trips
-    Open-Meteo's rate limiting (HTTP 429).
-
-    coords: tuple of (lat, lon) tuples, in the exact order results are needed.
-    Returns: dict mapping the (lat, lon) tuple -> weather dict (same shape
-             as fetch_current_weather's return value).
-    """
+  
     if not coords:
         return {}
 
@@ -392,8 +334,7 @@ def fetch_current_weather_batch(coords: tuple) -> dict:
         return out
 
     except Exception as e:
-        # Fail gracefully for ALL locations at once so the dashboard still
-        # renders with fallback values instead of crashing.
+       
         fallback = {
             "success": False,
             "error": str(e),
@@ -412,10 +353,7 @@ def fetch_current_weather_batch(coords: tuple) -> dict:
 
 @st.cache_data(ttl=3600)
 def fetch_elevation_batch(coords: tuple) -> dict:
-    """
-    Same batching idea as fetch_current_weather_batch, but for elevation.
-    Returns: dict mapping (lat, lon) -> elevation in meters.
-    """
+
     if not coords:
         return {}
 
