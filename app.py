@@ -1,14 +1,3 @@
-"""
-app.py
-------
-GIS-Integrated Hybrid Chaos Theory-Based Flash Flood Early Warning System.
-Main Streamlit dashboard: ingests live weather data, runs the hybrid chaos
-model, and renders an interactive Web-GIS early warning interface.
-
-Run with:
-    streamlit run app.py
-"""
-
 import time
 import numpy as np
 import pandas as pd
@@ -26,10 +15,6 @@ from data_fetcher import (
 from chaos_model import run_chaos_simulation, project_risk_timeseries
 from gis_utils import build_hazard_map
 
-
-# ============================================================================
-# PAGE CONFIG + STYLING
-# ============================================================================
 st.set_page_config(
     page_title="Flash Flood EWS | Chaos-GIS Dashboard",
     page_icon="🌊",
@@ -49,8 +34,6 @@ CUSTOM_CSS = """
         --glass-border: rgba(148, 197, 255, 0.14);
         --glass-border-hover: rgba(34, 211, 238, 0.35);
     }
-
-    /* ---------- animated ambient background ---------- */
     .stApp {
         background:
             radial-gradient(circle at 12% 8%, rgba(34, 211, 238, 0.10), transparent 40%),
@@ -84,7 +67,6 @@ CUSTOM_CSS = """
         to   { opacity: 1; }
     }
 
-    /* ---------- title + ripple divider ---------- */
     h1 {
         background: linear-gradient(90deg, #f0f6fc, var(--water-cyan) 60%, var(--water-blue));
         -webkit-background-clip: text;
@@ -106,7 +88,6 @@ CUSTOM_CSS = """
         100% { background-position: 200% 50%; }
     }
 
-    /* ---------- glass metric cards ---------- */
     .metric-card {
         background: var(--glass-bg);
         backdrop-filter: blur(14px);
@@ -142,7 +123,6 @@ CUSTOM_CSS = """
         font-family: 'JetBrains Mono', monospace;
     }
 
-    /* ---------- risk banner with pulsing glow ---------- */
     .risk-banner {
         border-radius: 16px;
         padding: 22px;
@@ -164,7 +144,6 @@ CUSTOM_CSS = """
 
     .subtle { color: #8b949e; font-size: 13px; }
 
-    /* ---------- section titles ---------- */
     .section-title {
         font-size: 18px;
         font-weight: 700;
@@ -184,7 +163,6 @@ CUSTOM_CSS = """
         box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
     }
 
-    /* ---------- glass panels around map + charts ---------- */
     [data-testid="stIFrame"], [data-testid="stPlotlyChart"] {
         border-radius: 16px !important;
         overflow: hidden;
@@ -199,7 +177,6 @@ CUSTOM_CSS = """
         box-shadow: 0 12px 34px -14px rgba(34, 211, 238, 0.25);
     }
 
-    /* ---------- sidebar ---------- */
     section[data-testid="stSidebar"] {
         background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(11, 18, 32, 0.96));
         border-right: 1px solid var(--glass-border);
@@ -211,7 +188,6 @@ CUSTOM_CSS = """
         color: transparent;
     }
 
-    /* ---------- inputs, buttons, tabs ---------- */
     .stButton > button {
         background: linear-gradient(135deg, rgba(34,211,238,0.16), rgba(59,130,246,0.16));
         border: 1px solid var(--glass-border);
@@ -259,8 +235,6 @@ CUSTOM_CSS = """
             animation: none !important;
         }
     }
-
-    /* ---------- mobile: disable backdrop-filter on iframe/chart wrappers ----------
        backdrop-filter + iframes has a well-known repaint bug on mobile Safari/
        Chrome: the blurred layer can get "stuck" showing a stale blank/black
        frame until something forces a reflow (e.g. opening DevTools). It's a
@@ -291,10 +265,6 @@ CUSTOM_CSS = """
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-
-# ============================================================================
-# SIDEBAR — CONTROLS
-# ============================================================================
 with st.sidebar:
     st.markdown("## 🌊 Flood EWS Control Panel")
     st.caption("GIS-Integrated Hybrid Chaos-Theory Flash Flood Prediction")
@@ -435,10 +405,6 @@ with st.sidebar:
 if auto_refresh:
     st_autorefresh(interval=refresh_secs * 1000, key="auto_refresh_timer")
 
-
-# ============================================================================
-# DATA INGESTION — run chaos model for ALL locations (for the GIS map)
-# ============================================================================
 @st.cache_data(ttl=60)
 def compute_all_locations(use_demo: bool, locations_dict: dict):
     coords = tuple((meta["lat"], meta["lon"]) for meta in locations_dict.values())
@@ -472,10 +438,6 @@ site = all_locations_config[selected_location]
 result = all_results[selected_location]
 weather = result["weather"]
 
-
-# ============================================================================
-# HEADER
-# ============================================================================
 st.markdown(
     "<h1 style='margin-bottom:0;'>🌊 Automated Flash Flood Early Warning System</h1>"
     "<p class='subtle'>GIS-Integrated Hybrid Chaos Theory-Based Predictive Modeling "
@@ -491,9 +453,6 @@ elif not weather.get("success", True):
     st.warning(f"⚠️ Live weather API issue for this session, showing fallback values. ({weather.get('error')})")
 
 
-# ============================================================================
-# ALERT BANNER
-# ============================================================================
 st.markdown(
     f"""<div class="risk-banner" style="background:{result['risk_color']}22;
         border:2px solid {result['risk_color']}; --banner-glow:{result['risk_color']};">
@@ -504,9 +463,6 @@ st.markdown(
 )
 
 
-# ============================================================================
-# METRIC CARDS
-# ============================================================================
 cols = st.columns(6)
 metrics = [
     ("🌧 Rainfall", f"{weather['rain_mm']:.1f} mm"),
@@ -520,9 +476,6 @@ for c, (label, value) in zip(cols, metrics):
     c.markdown(f"<div class='metric-card'><h3>{label}</h3><p>{value}</p></div>", unsafe_allow_html=True)
 
 
-# ============================================================================
-# MAIN LAYOUT: MAP + CHAOS VISUALS
-# ============================================================================
 st.markdown("<div class='section-title'>🗺️ Web-GIS Regional Hazard Map</div>", unsafe_allow_html=True)
 hazard_map = build_hazard_map(all_results)
 components.html(hazard_map._repr_html_(), height=460, scrolling=False)
@@ -593,9 +546,6 @@ with right:
     st.plotly_chart(fig_signals, use_container_width=True)
 
 
-# ============================================================================
-# FORECAST TIMELINE
-# ============================================================================
 st.markdown("<div class='section-title'>⏱️ Projected Risk — Next 24 Hours</div>", unsafe_allow_html=True)
 projected = project_risk_timeseries(
     result["ffri"], weather.get("hourly_precip_series", []), weather["soil_moisture"]
