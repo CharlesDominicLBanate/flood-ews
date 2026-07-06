@@ -302,13 +302,13 @@ def fetch_elevation(lat: float, lon: float) -> float:
         return 0.0
 
 
-def _get_with_retry(url: str, params: dict, timeout: int, retries: int = 2):
+def _get_with_retry(url: str, params: dict, timeout: int, retries: int = 3):
     """
-    GET with a couple of retries + short backoff, specifically to absorb
-    transient 429 (rate limit) responses gracefully instead of failing
-    the whole batch outright.
+    GET with a few retries + short backoff, to absorb transient 429 (rate
+    limit) or 5xx (server-side outage) responses gracefully instead of
+    failing the whole batch outright.
     """
-    delay = 1.0
+    delay = 1.5
     last_exc = None
     for attempt in range(retries + 1):
         try:
