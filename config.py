@@ -1,18 +1,4 @@
-"""
-config.py
----------
-Central configuration for the Flash Flood Early Warning System (EWS).
-Edit LOCATIONS to add/remove monitoring sites, or tweak RISK thresholds
-to calibrate how sensitive the model is.
-"""
 
-# ---------------------------------------------------------------------------
-# Monitoring locations (spatial data). lat/lon required. `slope_factor` is a
-# crude 0-1 proxy for terrain steepness / drainage vulnerability at that site
-# (1 = very steep / poor drainage -> flashier response). In a full deployment
-# this would come from a DEM (Digital Elevation Model) layer instead of being
-# hardcoded.
-# ---------------------------------------------------------------------------
 LOCATIONS = {
     # Luzon
     "Metro Manila (Marikina City)": {"lat": 14.6507, "lon": 121.1029, "slope_factor": 0.85},
@@ -43,19 +29,13 @@ LOCATIONS = {
     "Puerto Princesa City":         {"lat": 9.7392,  "lon": 118.7353, "slope_factor": 0.45},
 }
 
-# ---------------------------------------------------------------------------
-# Open-Meteo API endpoints (free, no API key required)
-# ---------------------------------------------------------------------------
+
 WEATHER_API_URL = "https://api.open-meteo.com/v1/forecast"
 ELEVATION_API_URL = "https://api.open-meteo.com/v1/elevation"
 GEOCODING_API_URL = "https://geocoding-api.open-meteo.com/v1/search"
 
-# Used when a user adds a custom location without known terrain data
 DEFAULT_SLOPE_FACTOR = 0.60
 
-# ---------------------------------------------------------------------------
-# Risk classification thresholds (Flash Flood Risk Index, 0-100)
-# ---------------------------------------------------------------------------
 RISK_LEVELS = [
     (0, 25,  "LOW",      "#2ecc71"),
     (25, 50, "MODERATE", "#f1c40f"),
@@ -63,10 +43,8 @@ RISK_LEVELS = [
     (75, 101, "CRITICAL", "#e74c3c"),
 ]
 
-# Auto-refresh interval for "live" streaming feel (milliseconds)
 REFRESH_INTERVAL_MS = 60_000  # 60 seconds
 
-# Chaos-model simulation settings
 SIM_STEPS = 400
 SIM_DT = 0.01
 LYAPUNOV_EPSILON = 1e-5  # initial separation between twin trajectories
