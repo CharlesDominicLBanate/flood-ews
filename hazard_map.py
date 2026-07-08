@@ -31,9 +31,9 @@ _LEGEND_ROWS = [
 ]
 
 # Philippines province/district (ADM2) boundaries, sourced from geoBoundaries CGAZ
-# and filtered to shapeGroup == "PHL". Ship this file alongside the module
-# (see data/ph_provinces.geojson). Attribution: geoBoundaries (Runfola et al., 2020), CC-BY 4.0.
-_DEFAULT_BOUNDARY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "ph_provinces.geojson")
+# and filtered to shapeGroup == "PHL". Ship this file alongside the module.
+# Attribution: geoBoundaries (Runfola et al., 2020), CC-BY 4.0.
+_DEFAULT_BOUNDARY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ph_provinces.geojson")
 
 
 # ---------------------------------------------------------------------------
