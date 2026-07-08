@@ -206,11 +206,11 @@ def fetch_current_weather(lat: float, lon: float) -> dict:
         current = data.get("current", {})
         hourly = data.get("hourly", {})
 
-      
+
         soil_moisture_series = hourly.get("soil_moisture_0_to_1cm", [])
         soil_moisture = soil_moisture_series[0] if soil_moisture_series else 0.2
 
-   
+
         precip_series = hourly.get("precipitation", [])
         precip_accum_24h = sum(v for v in precip_series if v is not None)
 
@@ -228,7 +228,7 @@ def fetch_current_weather(lat: float, lon: float) -> dict:
         }
 
     except Exception as e:
-     
+
         return {
             "success": False,
             "error": str(e),
@@ -246,7 +246,7 @@ def fetch_current_weather(lat: float, lon: float) -> dict:
 
 @st.cache_data(ttl=3600)
 def fetch_elevation(lat: float, lon: float) -> float:
-   
+
     try:
         resp = requests.get(
             ELEVATION_API_URL,
@@ -260,31 +260,71 @@ def fetch_elevation(lat: float, lon: float) -> float:
         return 0.0
 
 
-def _get_with_retry(url: str, params: dict, timeout: int, retries: int = 3):
-   
-    delay = 1.5
+# Module-level (app-wide, shared across ALL user sessions since Streamlit
+# runs one process) timestamp of the last time we actually hit Open-Meteo.
+# This is a simple global throttle so that bursts of reruns/sessions can't
+# collectively hammer the API faster than a safe minimum spacing, even if
+# their cache keys differ (e.g. different custom-location sets per user).
+_last_weather_call_ts = 0.0
+_last_elevation_call_ts = 0.0
+_MIN_CALL_SPACING_SECONDS = 2.0  # be polite to the free/shared API
+
+
+def _throttle(last_ts_attr: str, min_spacing: float = _MIN_CALL_SPACING_SECONDS):
+    global _last_weather_call_ts, _last_elevation_call_ts
+    now = time.monotonic()
+    last_ts = globals()[last_ts_attr]
+    wait = min_spacing - (now - last_ts)
+    if wait > 0:
+        time.sleep(wait)
+    globals()[last_ts_attr] = time.monotonic()
+
+
+def _get_with_retry(url: str, params: dict, timeout: int, retries: int = 4):
+    """
+    GET with exponential backoff. Crucially, if the server sends a
+    Retry-After header on a 429, we honor THAT value instead of guessing —
+    Open-Meteo (and most APIs) tell you exactly how long to back off.
+    """
+    delay = 2.0
     last_exc = None
     for attempt in range(retries + 1):
         try:
             resp = requests.get(url, params=params, timeout=timeout)
             if resp.status_code == 429 and attempt < retries:
-                time.sleep(delay)
+                retry_after = resp.headers.get("Retry-After")
+                if retry_after is not None:
+                    try:
+                        sleep_for = float(retry_after)
+                    except ValueError:
+                        sleep_for = delay
+                else:
+                    sleep_for = delay
+                # add small jitter so many concurrent sessions don't all
+                # wake up and retry at the exact same instant
+                sleep_for += random.uniform(0, 0.5)
+                time.sleep(sleep_for)
                 delay *= 2
                 continue
             resp.raise_for_status()
             return resp
+        except requests.exceptions.HTTPError as e:
+            last_exc = e
+            if attempt < retries:
+                time.sleep(delay + random.uniform(0, 0.5))
+                delay *= 2
         except Exception as e:
             last_exc = e
             if attempt < retries:
-                time.sleep(delay)
+                time.sleep(delay + random.uniform(0, 0.5))
                 delay *= 2
     if last_exc:
         raise last_exc
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)  # was 300s — widened to 10 min to cut call volume
 def fetch_current_weather_batch(coords: tuple) -> dict:
-  
+
     if not coords:
         return {}
 
@@ -304,6 +344,7 @@ def fetch_current_weather_batch(coords: tuple) -> dict:
     }
 
     try:
+        _throttle("_last_weather_call_ts")
         resp = _get_with_retry(WEATHER_API_URL, params, timeout=20)
         data = resp.json()
         # Open-Meteo returns a LIST of per-location objects when multiple
@@ -334,7 +375,7 @@ def fetch_current_weather_batch(coords: tuple) -> dict:
         return out
 
     except Exception as e:
-       
+
         fallback = {
             "success": False,
             "error": str(e),
@@ -361,6 +402,7 @@ def fetch_elevation_batch(coords: tuple) -> dict:
     lons = ",".join(str(c[1]) for c in coords)
 
     try:
+        _throttle("_last_elevation_call_ts")
         resp = _get_with_retry(
             ELEVATION_API_URL, {"latitude": lats, "longitude": lons}, timeout=15
         )
