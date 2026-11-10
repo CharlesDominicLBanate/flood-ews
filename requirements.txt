@@ -1,2 +1,7 @@
-429: Too Many Requests
-For more on scraping GitHub and how it may affect your rights, please review our Terms of Service (https://docs.github.com/en/site-policy/github-terms/github-terms-of-service).
+streamlit>=1.30
+numpy>=1.24
+scipy>=1.10
+pandas>=2.0
+requests>=2.31
+folium>=0.15
+plotly>=5.18
