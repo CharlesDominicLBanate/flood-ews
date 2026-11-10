@@ -16,6 +16,7 @@ RISK_LEVELS = [
 
 # --- APIs (all free, no key needed) ---
 WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
+ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 PSGC_BASES = ["https://psgc.gitlab.io/api", "https://psgc.cloud/api"]
 TIMEZONE = "Asia/Manila"
