@@ -7,13 +7,22 @@ def build_hazard_map(location_results: dict, center=(9.5, 122.5), zoom_start=6):
     location_results: dict of {name: {"lat", "lon", "ffri", "risk_label",
                                        "risk_color", "elevation", ...}}
     """
+    # CartoDB tiles now need an API key, so use free key-less basemaps instead.
     fmap = folium.Map(
         location=center,
         zoom_start=zoom_start,
-        tiles="CartoDB positron",
+        tiles=None,
         control_scale=True,
     )
+    folium.TileLayer(
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        attr="Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+        name="Light map",
+        max_zoom=16,
+    ).add_to(fmap)
+    folium.TileLayer("OpenStreetMap", name="Street map").add_to(fmap)
     Fullscreen(position="topright").add_to(fmap)
+    folium.LayerControl(position="topleft", collapsed=True).add_to(fmap)
 
     fmap.get_root().header.add_child(folium.Element("""
         <style>
