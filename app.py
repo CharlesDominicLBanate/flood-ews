@@ -10,10 +10,10 @@ import streamlit.components.v1 as components
 
 import ph_locations as ph
 from chaos_model import project_risk_timeseries, run_chaos_simulation
-from config import (DEFAULT_SITE, DEFAULT_SLOPE_FACTOR, MAP_CENTER, MAP_REFRESH_SECONDS,
-                    MAP_ZOOM, PRESET_SITES)
+from config import DEFAULT_SITE, MAP_CENTER, MAP_REFRESH_SECONDS, MAP_ZOOM, PRESET_SITES
 from data_fetcher import SCENARIOS, fetch_weather, simulate_weather
 from gis_utils import build_hazard_map
+from terrain import get_terrain
 
 st.set_page_config(page_title="Flash Flood EWS — Chaos-GIS Dashboard",
                    page_icon="🌊", layout="wide")
@@ -54,9 +54,10 @@ iframe { border-radius: 14px; border: 1px solid rgba(255,255,255,.08); }
 # ----------------------------------------------------------------- data
 def _analyze_raw(lat, lon, offline, scenario):
     weather = simulate_weather(lat, lon, scenario) if offline else fetch_weather(lat, lon)
-    sim = run_chaos_simulation(weather, DEFAULT_SLOPE_FACTOR)
+    terrain = get_terrain(lat, lon, offline)
+    sim = run_chaos_simulation(weather, terrain["factor"])
     proj = project_risk_timeseries(sim["ffri"], weather["hourly_precip"], weather["soil_moisture"])
-    return weather, sim, proj
+    return weather, sim, proj, terrain
 
 
 @st.cache_data(show_spinner=False, max_entries=100)
@@ -64,19 +65,40 @@ def analyze(lat, lon, offline, scenario, bucket):
     return _analyze_raw(lat, lon, offline, scenario)
 
 
-@st.cache_data(show_spinner=False, max_entries=20)
-def map_results(sites: tuple, offline, scenario, bucket):
-    def work(site):
-        name, lat, lon = site
+@st.cache_resource
+def site_cache():
+    """Persistent per-site results for the map. Only successes are stored."""
+    return {}
+
+
+def _map_entry(name, lat, lon, offline, scenario, ttl):
+    cache = site_cache()
+    key = (round(lat, 4), round(lon, 4), offline, scenario)
+    now = time.time()
+    hit = cache.get(key)
+    if hit and now - hit[0] < ttl:
+        return hit[1], None
+    last = None
+    for attempt in range(2):                      # one retry for transient API errors / rate limits
         try:
-            w, s, _ = _analyze_raw(lat, lon, offline, scenario)
-            return name, {"lat": lat, "lon": lon, "ffri": s["ffri"], "risk_label": s["risk_label"],
-                          "risk_color": s["risk_color"], "elevation": w["elevation"]}
-        except Exception:
-            return name, None
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        pairs = list(ex.map(work, sites))
-    return {n: r for n, r in pairs if r}, [n for n, r in pairs if not r]
+            w, s, _, _ = _analyze_raw(lat, lon, offline, scenario)
+            entry = {"lat": lat, "lon": lon, "ffri": s["ffri"], "risk_label": s["risk_label"],
+                     "risk_color": s["risk_color"], "elevation": w["elevation"]}
+            cache[key] = (now, entry)
+            return entry, None
+        except Exception as e:
+            last = e
+            time.sleep(1.5)
+    return None, f"{type(last).__name__}: {last}"[:90]
+
+
+def collect_map_results(sites: dict, offline, scenario):
+    items = [(n, s["lat"], s["lon"]) for n, s in sites.items()]
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        out = list(ex.map(lambda it: (it[0], *_map_entry(it[0], it[1], it[2], offline, scenario, MAP_REFRESH_SECONDS)), items))
+    results = {n: r for n, r, _ in out if r}
+    failed = {n: err for n, r, err in out if not r}
+    return results, failed
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -212,7 +234,7 @@ with st.sidebar:
 sel = sites[site]
 bucket = int(time.time() // (interval if live else 600))
 try:
-    weather, sim, proj = analyze(sel["lat"], sel["lon"], offline, scenario, bucket)
+    weather, sim, proj, terrain = analyze(sel["lat"], sel["lon"], offline, scenario, bucket)
 except Exception as e:
     st.error(f"Hindi makuha ang weather data para sa {site}: {e}\n\n"
              "I-check ang internet, o i-on ang **Offline demo mode** sa sidebar.")
@@ -242,14 +264,20 @@ st.markdown('<div class="cards">' + "".join(
 
 # ----------------------------------------------------------------- map
 st.markdown('<div class="sec">🗺️ Web-GIS Regional Hazard Map</div>', unsafe_allow_html=True)
-site_tuple = tuple((n, s["lat"], s["lon"]) for n, s in sites.items())
 with st.spinner("Kinukuha ang risk ng lahat ng monitoring sites..."):
-    results, failed = map_results(site_tuple, offline, scenario, int(time.time() // MAP_REFRESH_SECONDS))
-if results:
-    fmap = build_hazard_map(results, center=MAP_CENTER, zoom_start=MAP_ZOOM)
-    components.html(fmap.get_root().render(), height=520)
+    results, failed = collect_map_results(sites, offline, scenario)
+
+# The selected site was already analysed above, so it must always appear on the map.
+results[site] = {"lat": sel["lat"], "lon": sel["lon"], "ffri": ffri, "risk_label": label,
+                 "risk_color": color, "elevation": weather["elevation"]}
+failed.pop(site, None)
+
+is_custom = site in st.session_state.custom_sites
+center, zoom = ((sel["lat"], sel["lon"]), 9) if is_custom else (MAP_CENTER, MAP_ZOOM)
+fmap = build_hazard_map(results, center=center, zoom_start=zoom)
+components.html(fmap.get_root().render(), height=520)
 if failed:
-    st.caption(f"⚠️ Walang data para sa: {', '.join(failed)}")
+    st.caption("⚠️ Walang data para sa: " + "; ".join(f"{n} ({e})" for n, e in failed.items()))
 
 # ----------------------------------------------------------------- attractor + gauge + signals
 def attractor_fig(traj):
@@ -302,6 +330,8 @@ with right:
     show_chart(gauge_fig(ffri, color))
     st.markdown('<div class="sec">🧬 Contributing Signals</div>', unsafe_allow_html=True)
     show_chart(signals_fig(sim))
+    st.caption(f"Terrain: slope {terrain['slope_deg']:.1f}° · "
+               f"{terrain['relief_m']:+.0f} m vs. surroundings · source: {terrain['source']}")
 
 # ----------------------------------------------------------------- projection
 st.markdown('<div class="sec">🔮 Projected Risk — Next 24 Hours</div>', unsafe_allow_html=True)
